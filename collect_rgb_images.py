@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--show', action='store_true')
     args = parser.parse_args()
 
-    save_root = Path(args.save_root) / datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_root = Path(args.save_root) / datetime.now().strftime("%Y%m%d_%H%M%S") / 'rgb'
     save_root.mkdir(parents=True, exist_ok=False)
     args.save_root = save_root
     main(args)
