@@ -20,7 +20,6 @@ def get_mask(rgb, hsv_color, debug=False):
 
 def main(args):
     
-    
     # retrieve HSV colors
     skier_rgb = np.uint8([[[214, 92, 92]]])
     flags_rgb = np.uint8([[[66, 72, 200]]])
@@ -36,7 +35,6 @@ def main(args):
     classes_hsv = {}
     for cls, rgbs in classes_rgb.items():
         classes_hsv[cls] = cv2.cvtColor(rgbs, cv2.COLOR_RGB2HSV)[0]
-
     for cls in classes_hsv.keys():
         cls_path = args.save_root / cls
         cls_path.mkdir(exist_ok=True)
