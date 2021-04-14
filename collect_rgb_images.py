@@ -20,7 +20,7 @@ def rollout(env, args):
             cv2.waitKey(10)
 
         path = str(args.save_root / f'{step:06d}.png')
-        cv2.imwrite(path, obs)
+        #cv2.imwrite(path, obs)
 
         step += 1
 
