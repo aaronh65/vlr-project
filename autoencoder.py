@@ -19,8 +19,15 @@ class AutoEncoder(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         rgb = batch['rgb']
-        skier = batch['skier']
 
+        skier = batch['skier']
+        #masks = stack(batch)
+        # 
+
+        latent = self.encoder(rgb)
+        reconstruct = self.decoder(latent)
+
+        loss torch.nn.MSELoss(reconstruct, masks)
         print(rgb.shape)
 
         loss = torch.ones(self.hparams.batch_size).mean()
@@ -37,7 +44,8 @@ class AutoEncoder(pl.LightningModule):
         return get_dataloader(self.hparams, is_train=False)
 
     def configure_optimizers(self):
-        optim = torch.optim.Adam(list(self.encoder.parameters())) # add in lr from hparams if default adam sucks
+        # add in lr from hparams if default adam sucks
+        optim = torch.optim.Adam(list(self.encoder.parameters())) 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
         return [optim], [scheduler]
 
