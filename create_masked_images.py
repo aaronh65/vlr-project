@@ -15,8 +15,8 @@ def get_mask(rgb, hsv_color, debug=False):
     mask = cv2.inRange(hsv, low, high)
     return mask
 
-def main(args):
-    
+def get_hsv_colors():
+
     # retrieve HSV colors
     skier_rgb = np.uint8([[[214, 92, 92]]])
     flags_rgb = np.uint8([[[66, 72, 200]]])
@@ -32,7 +32,12 @@ def main(args):
     classes_hsv = {}
     for cls, rgbs in classes_rgb.items():
         classes_hsv[cls] = cv2.cvtColor(rgbs, cv2.COLOR_RGB2HSV)[0]
+    return classes_hsv
+
+def main(args):
     
+    classes_hsv = get_hsv_colors()
+
     # iterate through images
     ep_paths = sorted(args.dataset_dir.glob('*'))
     for _ep_path in ep_paths:
