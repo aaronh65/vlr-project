@@ -1,11 +1,14 @@
 import argparse
 import numpy as np
 import cv2
+import torch
 from PIL import Image
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import ToTensor
 from create_masked_images import get_hsv_colors, get_mask
 
+SHOW = False
 
 class SkierDataset(Dataset):
     def __init__(self, episodes):
@@ -15,29 +18,36 @@ class SkierDataset(Dataset):
             self.frames.extend(sorted(list(rgb_path.glob('*'))))
         self.classes_hsv = get_hsv_colors() # object to hsv color dict
 
+        self.transform = ToTensor()
+
     def __len__(self):
         return len(self.frames)
 
     def __getitem__(self, i):
         frame = self.frames[i]
+
         rgb = np.array(Image.open(frame))
+        rgb_tensor = self.transform(rgb)
+        res = {'rgb': rgb_tensor}
+
         h,w,c = rgb.shape
-        cv2.imshow('rgb', rgb)
-        
         masks = list()
         for cls, colors in self.classes_hsv.items():
             mask = np.zeros((h,w)).astype(bool)
             for color in colors:
                 temp_mask = get_mask(rgb.copy(), color)
                 temp_mask = temp_mask.astype(bool)
-                mask = np.logical_or(mask, temp_mask)
-            mask = np.uint8(mask) * 255
-            masks.append(mask)
+                mask = np.float32(np.logical_or(mask, temp_mask))
+            res[cls] = torch.FloatTensor(np.expand_dims(mask, 0))
+            masks.append(np.uint8(mask) * 255)
         masks = np.hstack(masks)
-        cv2.imshow('masks', masks)
-        cv2.waitKey(10)
 
-        return frame
+        if SHOW:
+            cv2.imshow('rgb', rgb)
+            cv2.imshow('masks', masks)
+            cv2.waitKey(10)
+
+        return res
 
 def get_dataloader(args, is_train=False):
     data_dir = Path(args.dataset_dir)
@@ -52,17 +62,28 @@ def get_dataloader(args, is_train=False):
             episodes.append(path)
 
     dataset = SkierDataset(episodes)
-    return dataset
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, drop_last=True)
+    return dataloader
     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', type=str, default='data/20210413_182405')
+    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--num_workers', type=int, default=4)
     args = parser.parse_args()
     
-    dataset = get_dataloader(args, is_train=True)
+    dataloader = get_dataloader(args, is_train=True)
     
-    print(f'train dataset has {len(dataset)} samples')
-    for data in dataset:
-        pass
-        #print(data)
+    print(f'with batch_size={args.batch_size}, train dataloader has {len(dataloader)} batches')
+    for batch_nb, batch in enumerate(dataloader):
+        rgb = batch['rgb']
+        skier = batch['skier']
+
+        print(rgb.shape)
+        print(skier.shape)
+
+        break
+
+
+
