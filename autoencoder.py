@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from pytorch_lightning.callbacks import ModelCheckpoint
-from models import Encoder
+from models import Encoder, Decoder
 from dataloader import get_dataloader
 import torch
 import pytorch_lightning as pl
@@ -13,22 +13,22 @@ class AutoEncoder(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.encoder = Encoder()
+        self.decoder = Decoder(num_classes=4)
 
     def forward(self, input):
         return torch.ones(self.hparams.batch_size)
 
     def training_step(self, batch, batch_nb):
         rgb = batch['rgb']
-
         skier = batch['skier']
-        #masks = stack(batch)
-        # 
+
+        print(rgb.shape)
 
         latent = self.encoder(rgb)
-        reconstruct = self.decoder(latent)
-
-        loss torch.nn.MSELoss(reconstruct, masks)
-        print(rgb.shape)
+        print('latent shape')
+        print(latent.shape)
+        pred_masks = self.decoder(latent)
+        print(pred_masks.shape)
 
         loss = torch.ones(self.hparams.batch_size).mean()
         return {'loss': loss}
@@ -63,7 +63,7 @@ def main(hparams):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', type=str, default='data/20210413_182405')
-    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--max_epochs', type=int, default=2)
     parser.add_argument('--save_dir', type=str, default='checkpoints')

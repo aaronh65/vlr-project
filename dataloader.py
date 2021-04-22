@@ -5,7 +5,7 @@ import torch
 from PIL import Image
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import ToTensor
+from torchvision import transforms
 from create_masked_images import get_hsv_colors, get_mask
 
 SHOW = False
@@ -18,18 +18,20 @@ class SkierDataset(Dataset):
             self.frames.extend(sorted(list(rgb_path.glob('*'))))
         self.classes_hsv = get_hsv_colors() # object to hsv color dict
 
-        self.transform = ToTensor()
+        self.transform = transforms.Compose([
+            transforms.Resize((248, 160)),
+            transforms.ToTensor()
+            ])
 
     def __len__(self):
         return len(self.frames)
 
     def __getitem__(self, i):
+        res = {}
         frame = self.frames[i]
 
         rgb = np.array(Image.open(frame))
-        rgb_tensor = self.transform(rgb)
-        res = {'rgb': rgb_tensor}
-
+        
         h,w,c = rgb.shape
         masks = list()
         for cls, colors in self.classes_hsv.items():
@@ -41,6 +43,9 @@ class SkierDataset(Dataset):
             res[cls] = torch.FloatTensor(np.expand_dims(mask, 0))
             masks.append(np.uint8(mask) * 255)
         masks = np.hstack(masks)
+
+        rgb_tensor = self.transform(Image.fromarray(rgb))
+        res['rgb']  = rgb_tensor
 
         if SHOW:
             cv2.imshow('rgb', rgb)
