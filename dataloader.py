@@ -39,8 +39,10 @@ class SkierDataset(Dataset):
             for color in colors:
                 temp_mask = get_mask(rgb.copy(), color)
                 temp_mask = temp_mask.astype(bool)
-                mask = np.float32(np.logical_or(mask, temp_mask))
-            res[cls] = torch.FloatTensor(np.expand_dims(mask, 0))
+                mask = np.uint8(np.logical_or(mask, temp_mask))*255
+            mask_image = Image.fromarray(mask)
+            mask_tensor = self.transform(mask_image)
+            res[cls] = mask_tensor
             masks.append(np.uint8(mask) * 255)
         masks = np.hstack(masks)
 

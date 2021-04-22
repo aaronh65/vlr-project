@@ -16,11 +16,9 @@ class Encoder(nn.Module):
         x = self.conv1(x)
         x = self.nonlin(x)
         x = self.pool(x)
-        print(x.shape)
         x = self.conv2(x)
         x = self.nonlin(x)
         x = self.pool(x)
-        print(x.shape)
         x = self.conv3(x)
         x = self.nonlin(x)
         #x = self.pool(x)
@@ -36,18 +34,13 @@ class Decoder(nn.Module):
         self.nonlin = nn.ELU()
 
     def forward(self, x):
-        print('decoder shapes')
         x = self.conv1(x)
         x = self.nonlin(x)
-        print(x.shape)
         x = self.conv2(x)
         x = self.nonlin(x)
-        print(x.shape)
         x = self.conv3(x)
         x = self.nonlin(x)
-        print(x.shape)
         x = self.conv4(x)
         x = self.nonlin(x)
-        print(x.shape)
         return x
 
