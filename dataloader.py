@@ -19,7 +19,7 @@ class SkierDataset(Dataset):
         self.classes_hsv = get_hsv_colors() # object to hsv color dict
 
         self.transform = transforms.Compose([
-            transforms.Resize((248, 160)),
+            transforms.Resize((256, 160)),
             transforms.ToTensor()
             ])
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from models import Encoder, Decoder
+from models import Encoder, Decoder, ResnetEncoder, ResnetDecoder
 from dataloader import get_dataloader
 from utils import spatial_norm
 
@@ -20,8 +20,10 @@ class AutoEncoder(pl.LightningModule):
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
-        self.encoder = Encoder()
-        self.decoder = Decoder(num_classes=4)
+        #self.encoder = Encoder()
+        #self.decoder = Decoder(num_classes=4)
+        self.res_encoder = ResnetEncoder()
+        self.res_decoder = ResnetDecoder()
         self.criterion = nn.MSELoss(reduction='none')
 
     def forward(self, input):
@@ -36,8 +38,8 @@ class AutoEncoder(pl.LightningModule):
         trees = batch['trees']
 
         gt_masks = torch.cat((skier, flags, rocks, trees), dim=1)
-        latent = self.encoder(rgb)
-        pred_masks = self.decoder(latent)
+        latent = self.res_encoder(rgb)
+        pred_masks = self.res_decoder(latent)
 
         class_loss = self.criterion(pred_masks, gt_masks) # N,C,H,W
         class_loss = class_loss.sum((-1,-2))
@@ -97,7 +99,7 @@ class AutoEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         # add in lr from hparams if default adam sucks
-        optim = torch.optim.Adam(list(self.encoder.parameters())) 
+        optim = torch.optim.Adam(list(self.res_encoder.parameters()) + list(self.res_decoder.parameters())) 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
         return [optim], [scheduler]
 
