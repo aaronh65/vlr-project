@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import numpy as np
 import argparse
 
-DISPLAY=True
+DISPLAY=False
 
 class AutoEncoder(pl.LightningModule):
     def __init__(self, hparams):
@@ -44,10 +44,11 @@ class AutoEncoder(pl.LightningModule):
         if self.logger != None:
             self.logger.log_metrics({'train/loss': loss.mean().item()}, self.global_step)
 
-        if self.global_step % 50 == 0:
-            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            if self.logger != None:
-                self.logger.log_metrics({'train_image':wandb.Image(visuals)})
+        if self.global_step % 50 == 0 and DISPLAY:
+            pass
+            #visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            #if self.logger != None:
+            #    self.logger.log_metrics({'train_image':wandb.Image(visuals)})
 
         return {'loss': loss.mean()}
 
@@ -68,10 +69,11 @@ class AutoEncoder(pl.LightningModule):
         if self.logger != None:
             self.logger.log_metrics({'val/loss': val_loss.mean().item()}, self.global_step)
 
-        if self.global_step == 0:
-            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            if self.logger != None:
-                self.logger.log_metrics({'val_image':wandb.Image(visuals)})
+        if self.global_step == 0 and DISPLAY:
+            pass
+            #visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            #if self.logger != None:
+            #    self.logger.log_metrics({'val_image':wandb.Image(visuals)})
 
         return {'val_loss': val_loss.mean()}
 
@@ -132,6 +134,7 @@ def main(hparams):
     model = AutoEncoder(hparams)
     trainer = pl.Trainer(
             max_epochs=hparams.max_epochs,
+            gpus=hparams.gpus,
             checkpoint_callback=checkpoint_callback,
             enable_pl_optimizer=False,
             logger=logger,
@@ -142,6 +145,7 @@ def main(hparams):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', type=str, default='data/20210413_182405')
+    parser.add_argument('--gpus', type=int, default=-1)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--max_epochs', type=int, default=2)
