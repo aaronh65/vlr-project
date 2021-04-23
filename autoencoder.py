@@ -22,7 +22,7 @@ class AutoEncoder(pl.LightningModule):
         self.hparams = hparams
         self.encoder = Encoder()
         self.decoder = Decoder(num_classes=4)
-        self.criterion = nn.BCEWithLogitsLoss(reduction='none')
+        self.criterion = nn.MSELoss(reduction='none')
 
     def forward(self, input):
         return torch.ones(self.hparams.batch_size)
@@ -39,21 +39,21 @@ class AutoEncoder(pl.LightningModule):
         latent = self.encoder(rgb)
         pred_masks = self.decoder(latent)
 
-        loss = self.criterion(pred_masks, gt_masks) # N,C,H,W
-        class_loss = loss.sum((-1,-2))
+        class_loss = self.criterion(pred_masks, gt_masks) # N,C,H,W
+        class_loss = class_loss.sum((-1,-2))
         if self.logger != None:
-            self.logger.log_metrics({'train/loss': loss.mean().item()}, self.global_step)
+            self.logger.log_metrics({'train/loss': class_loss.mean().item()}, self.global_step)
 
         if self.global_step % 50 == 0:
             visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
             if self.logger != None:
                 self.logger.log_metrics({'train_image':wandb.Image(visuals)})
-
-        return {'loss': loss.mean()}
+        loss = class_loss.mean((-1,-2), keepdim=True).squeeze(-1)
+        return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
-
         rgb = batch['rgb']
+
         skier = batch['skier']
         flags = batch['flags']
         rocks = batch['rocks']
@@ -63,17 +63,31 @@ class AutoEncoder(pl.LightningModule):
         latent = self.encoder(rgb)
         pred_masks = self.decoder(latent)
 
-        val_loss = self.criterion(pred_masks, gt_masks)
-        class_loss = val_loss.sum((-1,-2))
+        class_loss = self.criterion(pred_masks, gt_masks)
+        class_loss = class_loss.sum((-1,-2))
         if self.logger != None:
-            self.logger.log_metrics({'val/loss': val_loss.mean().item()}, self.global_step)
+            self.logger.log_metrics({'val/loss': class_loss.mean().item()}, self.global_step)
 
         if self.global_step == 0:
             visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
             if self.logger != None:
                 self.logger.log_metrics({'val_image':wandb.Image(visuals)})
+        val_loss = class_loss.mean((-1,-2), keepdim=True).squeeze(-1)
+        return {'val_loss': val_loss}
 
-        return {'val_loss': val_loss.mean()}
+    def validation_epoch_end(self, batch_metrics):
+        results = dict()
+
+        for metrics in batch_metrics:
+            for key in metrics:
+                if key not in results:
+                    results[key] = list()
+                results[key].append(metrics[key].mean().item())
+
+        summary = {key: np.mean(val) for key, val in results.items()}
+        if self.logger != None:
+            self.logger.log_metrics(summary, self.global_step)
+        return summary
 
     def train_dataloader(self):
         return get_dataloader(self.hparams, is_train=True)
@@ -128,7 +142,7 @@ def main(hparams):
     else:
         logger = False
 
-    checkpoint_callback = ModelCheckpoint(hparams.save_dir, save_top_k=3, monitor='val_loss')
+    checkpoint_callback = ModelCheckpoint(hparams.save_dir, save_top_k=3)
     model = AutoEncoder(hparams)
     trainer = pl.Trainer(
             max_epochs=hparams.max_epochs,
