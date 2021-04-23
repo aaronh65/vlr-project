@@ -40,6 +40,6 @@ class Decoder(nn.Module):
         x = self.conv3(x)
         x = self.nonlin(x)
         x = self.conv4(x)
-        x = self.nonlin(x)
+        #x = self.nonlin(x)
         return x
 
