@@ -44,11 +44,10 @@ class AutoEncoder(pl.LightningModule):
         if self.logger != None:
             self.logger.log_metrics({'train/loss': loss.mean().item()}, self.global_step)
 
-        if self.global_step % 50 == 0 and DISPLAY:
-            pass
-            #visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            #if self.logger != None:
-            #    self.logger.log_metrics({'train_image':wandb.Image(visuals)})
+        if self.global_step % 50 == 0:
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            if self.logger != None:
+                self.logger.log_metrics({'train_image':wandb.Image(visuals)})
 
         return {'loss': loss.mean()}
 
@@ -69,11 +68,10 @@ class AutoEncoder(pl.LightningModule):
         if self.logger != None:
             self.logger.log_metrics({'val/loss': val_loss.mean().item()}, self.global_step)
 
-        if self.global_step == 0 and DISPLAY:
-            pass
-            #visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            #if self.logger != None:
-            #    self.logger.log_metrics({'val_image':wandb.Image(visuals)})
+        if self.global_step == 0:
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            if self.logger != None:
+                self.logger.log_metrics({'val_image':wandb.Image(visuals)})
 
         return {'val_loss': val_loss.mean()}
 
