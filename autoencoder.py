@@ -4,12 +4,17 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from models import Encoder, Decoder
 from dataloader import get_dataloader
+from utils import spatial_norm
 
+import wandb
+import cv2
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+import numpy as np
 import argparse
 
+DISPLAY=True
 
 class AutoEncoder(pl.LightningModule):
     def __init__(self, hparams):
@@ -17,13 +22,14 @@ class AutoEncoder(pl.LightningModule):
         self.hparams = hparams
         self.encoder = Encoder()
         self.decoder = Decoder(num_classes=4)
-        self.criterion = nn.BCEWithLogitsLoss()
+        self.criterion = nn.BCEWithLogitsLoss(reduction='none')
 
     def forward(self, input):
         return torch.ones(self.hparams.batch_size)
 
     def training_step(self, batch, batch_nb):
         rgb = batch['rgb']
+
         skier = batch['skier']
         flags = batch['flags']
         rocks = batch['rocks']
@@ -33,11 +39,17 @@ class AutoEncoder(pl.LightningModule):
         latent = self.encoder(rgb)
         pred_masks = self.decoder(latent)
 
-        loss = self.criterion(pred_masks, gt_masks)
+        loss = self.criterion(pred_masks, gt_masks) # N,C,H,W
+        class_loss = loss.sum((-1,-2))
         if self.logger != None:
             self.logger.log_metrics({'train/loss': loss.mean().item()}, self.global_step)
 
-        return {'loss': loss}
+        if self.global_step % 50 == 0:
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            if self.logger != None:
+                self.logger.log_metrics({'train_image':wandb.Image(visuals)})
+
+        return {'loss': loss.mean()}
 
     def validation_step(self, batch, batch_nb):
 
@@ -52,10 +64,16 @@ class AutoEncoder(pl.LightningModule):
         pred_masks = self.decoder(latent)
 
         val_loss = self.criterion(pred_masks, gt_masks)
+        class_loss = val_loss.sum((-1,-2))
         if self.logger != None:
             self.logger.log_metrics({'val/loss': val_loss.mean().item()}, self.global_step)
 
-        return {'val_loss': val_loss}
+        if self.global_step == 0:
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            if self.logger != None:
+                self.logger.log_metrics({'val_image':wandb.Image(visuals)})
+
+        return {'val_loss': val_loss.mean()}
 
     def train_dataloader(self):
         return get_dataloader(self.hparams, is_train=True)
@@ -68,6 +86,41 @@ class AutoEncoder(pl.LightningModule):
         optim = torch.optim.Adam(list(self.encoder.parameters())) 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
         return [optim], [scheduler]
+
+    def make_visuals(self, rgb, gt_masks, pred_masks, class_loss, num_samples=2):
+        all_images = list()
+        rgb = rgb.cpu().numpy().transpose(0,2,3,1)
+        gt_masks = gt_masks.detach().cpu().numpy()
+        pred_masks = spatial_norm(pred_masks).detach().cpu().numpy()
+
+        for b in range(num_samples):
+            images = list()
+            num_classes = gt_masks.shape[1]
+
+            # normalize and convert to numpy
+            
+            for c in range(num_classes):
+
+                _rgb = np.uint8(rgb[b]*255) # H,W,3
+                _gt = gt_masks[b,c:c+1].transpose(1,2,0) # H,W,1
+                _gt = np.uint8(_gt*255) # H,W,1
+                _gt = np.tile(_gt, (1,1,3)) # H,W,3
+
+                _pred = pred_masks[b,c:c+1].transpose(1,2,0) # H,W,1
+                _pred = np.uint8(_pred*255) # H,W,1
+                _pred = np.tile(_pred, (1,1,3)) # H,W,3
+
+                _combined = np.concatenate((_rgb, _gt, _pred), axis=1) # H,3W,3
+                images.append(_combined)
+
+            images = np.vstack(images) # 8 by 3 images each row H,3W,3
+            all_images.append(images)
+        all_images = np.hstack(all_images)
+        all_images = cv2.cvtColor(all_images, cv2.COLOR_RGB2BGR)
+        if DISPLAY:
+            cv2.imshow('debug', all_images)
+            cv2.waitKey(1000)
+        return all_images
 
 def main(hparams):
     if hparams.log:
