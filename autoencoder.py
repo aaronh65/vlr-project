@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from models import Encoder, Decoder, ResnetEncoder, ResnetDecoder
+from models import ResnetEncoder, ResnetDecoder
 from dataloader import get_dataloader
 from utils import spatial_norm
 
@@ -20,8 +20,6 @@ class AutoEncoder(pl.LightningModule):
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
-        #self.encoder = Encoder()
-        #self.decoder = Decoder(num_classes=4)
         self.res_encoder = ResnetEncoder()
         self.res_decoder = ResnetDecoder()
         self.criterion = nn.MSELoss(reduction='none')
@@ -43,13 +41,15 @@ class AutoEncoder(pl.LightningModule):
 
         class_loss = self.criterion(pred_masks, gt_masks) # N,C,H,W
         class_loss = class_loss.sum((-1,-2))
-        if self.logger != None:
-            self.logger.log_metrics({'train/loss': class_loss.mean().item()}, self.global_step)
+
+        metrics = {}
+        metrics['train/loss'] = class_loss.mean().item()
 
         if self.global_step % 50 == 0:
             visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            if self.logger != None:
-                self.logger.log_metrics({'train_image':wandb.Image(visuals)})
+            metrics['train_image'] = wandb.Image(visuals)
+        if self.logger is not None:
+            self.logger.log_metrics(metrics, self.global_step)
         loss = class_loss.mean((-1,-2), keepdim=True).squeeze(-1)
         return {'loss': loss}
 
@@ -62,18 +62,18 @@ class AutoEncoder(pl.LightningModule):
         trees = batch['trees']
 
         gt_masks = torch.cat((skier, flags, rocks, trees), dim=1)
-        latent = self.encoder(rgb)
-        pred_masks = self.decoder(latent)
+        latent = self.res_encoder(rgb)
+        pred_masks = self.res_decoder(latent)
 
         class_loss = self.criterion(pred_masks, gt_masks)
         class_loss = class_loss.sum((-1,-2))
-        if self.logger != None:
-            self.logger.log_metrics({'val/loss': class_loss.mean().item()}, self.global_step)
-
-        if self.global_step == 0:
+        metrics = {}
+        metrics['val/loss'] = class_loss.mean().item()
+        if batch_nb == 0:
             visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
-            if self.logger != None:
-                self.logger.log_metrics({'val_image':wandb.Image(visuals)})
+            metrics['val_image'] = wandb.Image(visuals)
+        if self.logger is not None:
+            self.logger.log_metrics(metrics, self.global_step)
         val_loss = class_loss.mean((-1,-2), keepdim=True).squeeze(-1)
         return {'val_loss': val_loss}
 
