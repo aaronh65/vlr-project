@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import numpy as np
 import argparse
 
-DISPLAY=False
+DISPLAY=True
 
 class AutoEncoder(pl.LightningModule):
     def __init__(self, hparams):
@@ -24,8 +24,13 @@ class AutoEncoder(pl.LightningModule):
         self.res_decoder = ResnetDecoder()
         self.criterion = nn.MSELoss(reduction='none')
 
-    def forward(self, input):
-        return torch.ones(self.hparams.batch_size)
+    def forward(self, rgb, decode=True):
+        latent = self.res_encoder(rgb)
+        if decode:
+            pred_masks = self.res_decoder(latent)
+            return pred_masks, latent
+        else:
+            return latent
 
     def training_step(self, batch, batch_nb):
         rgb = batch['rgb']
@@ -46,7 +51,7 @@ class AutoEncoder(pl.LightningModule):
         metrics['train/loss'] = class_loss.mean().item()
 
         if self.global_step % 50 == 0:
-            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks)
             metrics['train_image'] = wandb.Image(visuals)
         if self.logger is not None:
             self.logger.log_metrics(metrics, self.global_step)
@@ -70,7 +75,7 @@ class AutoEncoder(pl.LightningModule):
         metrics = {}
         metrics['val/loss'] = class_loss.mean().item()
         if batch_nb == 0:
-            visuals = self.make_visuals(rgb, gt_masks, pred_masks, class_loss)
+            visuals = self.make_visuals(rgb, gt_masks, pred_masks)
             metrics['val_image'] = wandb.Image(visuals)
         if self.logger is not None:
             self.logger.log_metrics(metrics, self.global_step)
@@ -103,7 +108,7 @@ class AutoEncoder(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
         return [optim], [scheduler]
 
-    def make_visuals(self, rgb, gt_masks, pred_masks, class_loss, num_samples=2):
+    def make_visuals(self, rgb, gt_masks, pred_masks, num_samples=2):
         all_images = list()
         rgb = rgb.cpu().numpy().transpose(0,2,3,1)
         gt_masks = gt_masks.detach().cpu().numpy()
