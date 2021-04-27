@@ -33,6 +33,8 @@ class DQNAgent(pl.LightningModule):
 
         self.model = DQNBase(3)
         self.step = 0
+        self.criterion = torch.nn.MSELoss(reduction='none')
+        self.gamma = 0.99
 
     def forward(self, rgb):
         #latent = self.res_encoder(rgb)
@@ -57,11 +59,11 @@ class DQNAgent(pl.LightningModule):
 
 
     def training_step(self, batch, batch_nb):
+        #print(batch_nb)
         if self.step == 0:
             state = self.env.reset()    
 
         for t in range(self.hparams.rollout_steps_per_iteration):
-            print(t)
             if self.done:
                 self.done = False
                 state = self.env.reset()
@@ -70,26 +72,29 @@ class DQNAgent(pl.LightningModule):
             new_state, reward, self.done, info = self.env.step(action) # change this to eps greedy 
             self.train_loader.dataset.add_experience(state,action,reward,self.done)
             state = new_state
+
+        state, action, reward, next_state, done, info = batch
+
+        # retrieve Q(s,a)
+        Qs = self.model(state) # N,3
+        Qsa = Qs[torch.arange(state.shape[0]).long(), action.long()]
+
+        # retrieve nQ(s,a)
+        with torch.no_grad():
+            nQs = self.model(next_state) # N,3
+            nQsa, _ = torch.max(nQs, dim=-1)
         
+        target = reward * (1-done) * self.gamma * nQsa
 
-        state, action, reward, next_state, info = batch
-
-
-        #batch is (s,a,r,ns,etc.)
-
-        #train DQN model on TD loss
-
-        #rollout environment to add to train dataloader
-        self.step += 1
-        loss = torch.ones(5)
-        return {'loss': loss}
+        loss = self.criterion(Qsa, target)
+        return {'loss': loss.mean()}
 
     def validation_step(self, batch, batch_nb):
         self.val_loader.dataset.buffer.append(batch_nb)
 
         # do an eval episode
-        val_loss = torch.ones(5)
-        return {'val_reward': val_loss} # N tensor array of eval ep rewards
+        val_loss = torch.randn(5)
+        return {'val_loss': val_loss} # N tensor array of eval ep rewards
 
     def validation_epoch_end(self, batch_metrics):
         results = dict()

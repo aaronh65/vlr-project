@@ -35,6 +35,9 @@ class SkierRLDataset(Dataset):
         self.rewards = deque()
         self.dones = deque()
 
+        self.step = 0
+        self.indices = np.random.choice(np.arange(self.buffer_len), size=self.epoch_len)
+
     def __len__(self):
         return self.epoch_len
 
@@ -54,50 +57,35 @@ class SkierRLDataset(Dataset):
 
     def __getitem__(self, i):
 
-        # modulus i to stay within replay buffer
-
+        #print(self.step)
         if not self.is_train:
             return torch.ones(5)
 
-        i = i % len(self.states)
+        # retrieve index
+        #if self.step >= self.epoch_len - 1:
+        #    self.indices = np.random.choice(np.arange(self.buffer_len), size=self.epoch_len)
+        #i = self.indices[i] % len(self.states)
+        i = np.random.choice(np.arange(len(self.states)))
+
         state = self.states[i]
-        action = self.actions[i]
-        reward = self.rewards[i]
-        done = self.dones[i]
+        action = torch.FloatTensor([self.actions[i]])
+        reward = torch.FloatTensor([self.rewards[i]])
+        done = torch.FloatTensor([self.dones[i]])
         next_index = i+1 if not done else i
         next_index = min(next_index, len(self.states)-1)
         next_state = self.states[next_index]
 
         state = self.transform(Image.fromarray(state))
         next_state = self.transform(Image.fromarray(next_state))
-        #res = {}
-        #frame = self.frames[i]
 
-        #rgb = np.array(Image.open(frame))
-        #
-        #h,w,c = rgb.shape
-        #masks = list()
-        #for cls, colors in self.classes_hsv.items():
-        #    mask = np.zeros((h,w)).astype(bool)
-        #    for color in colors:
-        #        temp_mask = get_mask(rgb.copy(), color)
-        #        temp_mask = temp_mask.astype(bool)
-        #        mask = np.uint8(np.logical_or(mask, temp_mask))*255
-        #    mask_image = Image.fromarray(mask)
-        #    mask_tensor = self.transform(mask_image)
-        #    res[cls] = mask_tensor
-        #    masks.append(np.uint8(mask) * 255)
-        #masks = np.hstack(masks)
-
-        #rgb_tensor = self.transform(Image.fromarray(rgb))
-        #res['rgb']  = rgb_tensor
         info = {}
 
-        return state, action, reward, next_state, info
+        self.step += 1
+        return state, action, reward, next_state, done, info
 
 def get_dataloader(args, is_train=False):
     dataset = SkierRLDataset(args, is_train)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+    dataloader = DataLoader(dataset, num_workers=1, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
     return dataloader
     
 
