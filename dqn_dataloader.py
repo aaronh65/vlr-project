@@ -13,12 +13,12 @@ from collections import deque
 SHOW = False
 
 class SkierRLDataset(Dataset):
-    def __init__(self, args, is_train=False):
+    def __init__(self, args, is_train=True):
         #self.frames = list()
         #for ep_path in episodes:
         #    rgb_path = ep_path / 'rgb'
         #    self.frames.extend(sorted(list(rgb_path.glob('*'))))
-        self.epoch_len = args.epoch_len*args.batch_size if not is_train else args.num_eval_episodes
+        self.epoch_len = args.epoch_len*args.batch_size if is_train else args.num_eval_episodes
         self.buffer_len = args.buffer_len
         self.buffer = deque()
         self.is_train = is_train

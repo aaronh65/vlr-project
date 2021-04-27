@@ -57,7 +57,6 @@ class DQNAgent(pl.LightningModule):
             state = new_state
 
 
-
     def training_step(self, batch, batch_nb):
         #print(batch_nb)
         if self.step == 0:
