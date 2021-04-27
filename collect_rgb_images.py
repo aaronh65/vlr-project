@@ -13,6 +13,7 @@ def rollout(env, args, idx):
 
     done = False
     step = 0
+    print(env.action_space)
     env.reset()
 
     while not done:
@@ -24,7 +25,7 @@ def rollout(env, args, idx):
             cv2.waitKey(10)
 
         path = str(save_root / f'{step:06d}.png')
-        print(path)
+        #print(path)
         cv2.imwrite(path, obs)
         step += 1
 
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_root', type=str, default='data')
     parser.add_argument('--env', type=str, default='Skiing-v0')
     parser.add_argument('--show', action='store_true')
-    parser.add_argument('--num_episodes', type=int, default=10)
+    parser.add_argument('--num_episodes', type=int, default=1)
     args = parser.parse_args()
 
     save_root = Path(args.save_root) / datetime.now().strftime("%Y%m%d_%H%M%S") 

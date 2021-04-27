@@ -18,9 +18,11 @@ class SkierRLDataset(Dataset):
         #for ep_path in episodes:
         #    rgb_path = ep_path / 'rgb'
         #    self.frames.extend(sorted(list(rgb_path.glob('*'))))
-        self.epoch_len = args.epoch_len
+        self.epoch_len = args.epoch_len*args.batch_size if not is_train else args.num_eval_episodes
         self.buffer_len = args.buffer_len
         self.buffer = deque()
+        self.is_train = is_train
+
 
         self.classes_hsv = get_hsv_colors() # object to hsv color dict
         self.transform = transforms.Compose([
@@ -28,11 +30,46 @@ class SkierRLDataset(Dataset):
             transforms.ToTensor()
             ])
 
+        self.states = deque()
+        self.actions = deque()
+        self.rewards = deque()
+        self.dones = deque()
+
     def __len__(self):
         return self.epoch_len
 
+    def add_experience(self, state, action, reward, done):
+
+        # pop if at buffer limit
+        if len(self.states) > self.buffer_len:
+            self.states.popleft()
+            self.actions.popleft()
+            self.rewards.popleft()
+            self.dones.popleft()
+
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.dones.append(done)
+
     def __getitem__(self, i):
-        print(self.buffer)
+
+        # modulus i to stay within replay buffer
+
+        if not self.is_train:
+            return torch.ones(5)
+
+        i = i % len(self.states)
+        state = self.states[i]
+        action = self.actions[i]
+        reward = self.rewards[i]
+        done = self.dones[i]
+        next_index = i+1 if not done else i
+        next_index = min(next_index, len(self.states)-1)
+        next_state = self.states[next_index]
+
+        state = self.transform(Image.fromarray(state))
+        next_state = self.transform(Image.fromarray(next_state))
         #res = {}
         #frame = self.frames[i]
 
@@ -54,8 +91,9 @@ class SkierRLDataset(Dataset):
 
         #rgb_tensor = self.transform(Image.fromarray(rgb))
         #res['rgb']  = rgb_tensor
+        info = {}
 
-        return torch.ones(5)
+        return state, action, reward, next_state, info
 
 def get_dataloader(args, is_train=False):
     dataset = SkierRLDataset(args, is_train)

@@ -28,7 +28,11 @@ class DQNAgent(pl.LightningModule):
 
         # setup RL environment and burn in data
         self.env = gym.make('Skiing-v0')
-        self.model = DQNBase(4)
+        self.env.reset()
+        self.done = False
+
+        self.model = DQNBase(3)
+        self.step = 0
 
     def forward(self, rgb):
         #latent = self.res_encoder(rgb)
@@ -37,23 +41,55 @@ class DQNAgent(pl.LightningModule):
         #return pred_masks, latent
         return None
 
+    def burn_in(self):
+        state = self.env.reset()
+        for t in range(self.hparams.burn_steps):
+            if self.done:
+                self.done = False
+                state = self.env.reset()
+
+            action = self.env.action_space.sample()
+            new_state, reward, self.done, info = self.env.step(action) # change this to eps greedy 
+            self.train_loader.dataset.add_experience(state,action,reward,self.done)
+
+            state = new_state
+
+
 
     def training_step(self, batch, batch_nb):
+        if self.step == 0:
+            state = self.env.reset()    
+
+        for t in range(self.hparams.rollout_steps_per_iteration):
+            print(t)
+            if self.done:
+                self.done = False
+                state = self.env.reset()
+
+            action = self.env.action_space.sample()
+            new_state, reward, self.done, info = self.env.step(action) # change this to eps greedy 
+            self.train_loader.dataset.add_experience(state,action,reward,self.done)
+            state = new_state
+        
+
+        state, action, reward, next_state, info = batch
+
 
         #batch is (s,a,r,ns,etc.)
 
         #train DQN model on TD loss
 
         #rollout environment to add to train dataloader
-
+        self.step += 1
         loss = torch.ones(5)
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         self.val_loader.dataset.buffer.append(batch_nb)
 
+        # do an eval episode
         val_loss = torch.ones(5)
-        return {'val_loss': val_loss}
+        return {'val_reward': val_loss} # N tensor array of eval ep rewards
 
     def validation_epoch_end(self, batch_metrics):
         results = dict()
@@ -71,6 +107,11 @@ class DQNAgent(pl.LightningModule):
 
     def train_dataloader(self):
         self.train_loader = get_dataloader(self.hparams, is_train=True)
+        print('burning in...')
+        self.burn_in()
+        print('done')
+        print(len(self.train_loader.dataset.actions))
+
         return self.train_loader
 
     def val_dataloader(self):
@@ -105,10 +146,12 @@ def main(hparams):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epoch_len', type=int, default=1000)
-    parser.add_argument('--buffer_len', type=int, default=1000)
+    parser.add_argument('--buffer_len', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--max_epochs', type=int, default=2)
-
+    parser.add_argument('--burn_steps', type=int, default=2000)
+    parser.add_argument('--num_eval_episodes', type=int, default=10)
+    parser.add_argument('--rollout_steps_per_iteration', type=int, default=20)
     args = parser.parse_args()
 
     main(args)
