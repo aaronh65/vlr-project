@@ -13,6 +13,7 @@ import torch.nn as nn
 import numpy as np
 import argparse
 from tqdm import tqdm
+from torchvision import transforms
 
     
 def burn_in(hparams, env, train_loader):
@@ -28,6 +29,12 @@ def burn_in(hparams, env, train_loader):
         train_loader.dataset.add_experience(state,action,reward,done)
 
         state = new_state
+
+def eps_greedy(eps, env, q_values):
+    if np.random.rand() < eps:
+        return env.action_space.sample()
+    else:
+        return np.argmax(q_values.cpu().squeeze().numpy())   
             
 def main(hparams):
 
@@ -41,12 +48,12 @@ def main(hparams):
 
     if hparams.model == 'base':
         model = DQNBase(3)
-    else:
-        model = DQNModel(3)
+    # else:
+    #     model = AutoEncoder.load_from_checkpoint(args.ae_path)
+
     if args.cuda:
         model.cuda()
     
-    encoder = AutoEncoder.load_from_checkpoint(args.ae_path)
     criterion = torch.nn.MSELoss(reduction='none')
     optim = torch.optim.Adam(list(model.parameters())) 
     gamma = 0.99
@@ -54,22 +61,32 @@ def main(hparams):
     val_freq = 250
     # ignore for now
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
-
+    transform = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((256, 160)),
+            transforms.ToTensor()
+            ])
     for i in range(hparams.max_epochs):
-        model.train()
+        
         state = env.reset()
         done = False
         for batch_nb, batch in tqdm(enumerate(train_loader)):
+            model.eval()
             for t in range(hparams.rollout_steps_per_iteration):
                 if done:
                     done = False
                     state = env.reset()
-
-                action = env.action_space.sample()
+                
+                obs = transform(env.render(mode='rgb_array')).unsqueeze(0)
+                with torch.no_grad():
+                    q_values = model(obs)
+                action = eps_greedy(eps=0.1, env=env, q_values=q_values)
                 new_state, reward, done, info = env.step(action) # change this to eps greedy 
                 train_loader.dataset.add_experience(state, action, reward, done)
                 state = new_state
-
+            
+            model.train()
+            
             # overloaded vars
             optim.zero_grad()
             if args.cuda:
@@ -105,7 +122,11 @@ def main(hparams):
                     while not val_done:
                         if args.render:
                             env.render()
-                        val_action = env.action_space.sample()
+                        
+                        obs = transform(env.render(mode='rgb_array')).unsqueeze(0)
+                        with torch.no_grad():
+                            q_values = model(obs)
+                        val_action = eps_greedy(eps=0, env=env, q_values=q_values)
                         # change this to eps greedy 
                         val_new_state, val_reward, val_done, val_info = env.step(val_action) 
                         val_state = val_new_state
