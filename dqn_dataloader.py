@@ -71,11 +71,12 @@ class SkierRLDataset(Dataset):
         action = torch.FloatTensor([self.actions[i]])
         reward = torch.FloatTensor([self.rewards[i]])
         done = torch.FloatTensor([self.dones[i]])
-        next_index = i+1 if not done else i
+        next_index = i+1 if not self.dones[i] else i
         next_index = min(next_index, len(self.states)-1)
         next_state = self.states[next_index]
 
         state = self.transform(Image.fromarray(state))
+        #state[:,:50, 20:140] = 1
         next_state = self.transform(Image.fromarray(next_state))
 
         info = {}

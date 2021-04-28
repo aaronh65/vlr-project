@@ -34,12 +34,14 @@ def eps_greedy(eps, env, q_values):
     if np.random.rand() < eps:
         return env.action_space.sample()
     else:
-        return np.argmax(q_values.cpu().squeeze().numpy())   
+        return np.argmax(q_values.cpu().squeeze().numpy())
             
 def main(hparams):
 
     # setup RL environment and burn in data
-    env = gym.make('Skiing-v0')
+    env = gym.make('Pong-v0')
+    #env = gym.make('CartPole-v0')
+    print(env.action_space)
     state = env.reset()
     done = False
     
@@ -47,18 +49,19 @@ def main(hparams):
     burn_in(hparams, env, train_loader)
 
     if hparams.model == 'base':
-        model = DQNBase(3)
+        model = DQNBase(6)
     # else:
     #     model = AutoEncoder.load_from_checkpoint(args.ae_path)
 
     if args.cuda:
         model.cuda()
-    
+
+
     criterion = torch.nn.MSELoss(reduction='none')
     optim = torch.optim.Adam(list(model.parameters())) 
     gamma = 0.99
     print_freq = 10
-    val_freq = 250
+    val_freq = 500
     # ignore for now
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
     transform = transforms.Compose([
@@ -77,10 +80,15 @@ def main(hparams):
                     done = False
                     state = env.reset()
                 
-                obs = transform(env.render(mode='rgb_array')).unsqueeze(0)
+                if args.render:
+                    env.render()
+                #obs = transform(env.render(mode='rgb_array')).unsqueeze(0)
+                model_input = transform(state).unsqueeze(0)
+                if args.cuda:
+                    model_input = model_input.cuda()
                 with torch.no_grad():
-                    q_values = model(obs)
-                action = eps_greedy(eps=0.1, env=env, q_values=q_values)
+                    q_values = model(model_input)
+                action = eps_greedy(eps=0.3, env=env, q_values=q_values)
                 new_state, reward, done, info = env.step(action) # change this to eps greedy 
                 train_loader.dataset.add_experience(state, action, reward, done)
                 state = new_state
@@ -93,6 +101,13 @@ def main(hparams):
                 for i, item in enumerate(batch[:-1]): # excluding info
                     batch[i] = item.cuda()
             _state, _action, _reward, _next_state, _done, _info = batch
+
+            #debug
+            if False:
+                rgb = _state[0].cpu().numpy().transpose(1,2,0)
+                rgb = np.uint8(rgb*255)
+                cv2.imshow('rgb', rgb)
+                cv2.waitKey(10)
 
             # retrieve Q(s,a)
             Qs = model(_state) # N,3
@@ -113,7 +128,7 @@ def main(hparams):
             if batch_nb % print_freq == 0:
                 tqdm.write("Loss: {}".format(loss.item()))
 
-            if batch_nb % val_freq == 0:
+            if batch_nb % val_freq == 0 and batch_nb != 0:
                 model.eval()
                 total_reward = 0
                 for i in range(hparams.num_eval_episodes):
@@ -124,9 +139,12 @@ def main(hparams):
                             env.render()
                         
                         obs = transform(env.render(mode='rgb_array')).unsqueeze(0)
+                        if args.cuda:
+                            obs = obs.cuda()
                         with torch.no_grad():
                             q_values = model(obs)
                         val_action = eps_greedy(eps=0, env=env, q_values=q_values)
+                        #tqdm.write(str(val_action))
                         # change this to eps greedy 
                         val_new_state, val_reward, val_done, val_info = env.step(val_action) 
                         val_state = val_new_state
@@ -148,11 +166,11 @@ if __name__ == '__main__':
 
     # DRL args
     parser.add_argument('--epoch_len', type=int, default=1000)
-    parser.add_argument('--buffer_len', type=int, default=10000)
+    parser.add_argument('--buffer_len', type=int, default=100000)
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--max_epochs', type=int, default=2)
-    parser.add_argument('--burn_steps', type=int, default=2000)
-    parser.add_argument('--num_eval_episodes', type=int, default=10)
+    parser.add_argument('--max_epochs', type=int, default=50)
+    parser.add_argument('--burn_steps', type=int, default=10000)
+    parser.add_argument('--num_eval_episodes', type=int, default=5)
     parser.add_argument('--rollout_steps_per_iteration', type=int, default=20)
     parser.add_argument('--model', type=str, default='base')
     parser.add_argument('--ae_path', type=str, default='checkpoints/autoencoder/20210423_184757/epoch=9.ckpt')
