@@ -86,7 +86,7 @@ class SkierRLDataset(Dataset):
 
 def get_dataloader(args, is_train=False):
     dataset = SkierRLDataset(args, is_train)
-    dataloader = DataLoader(dataset, num_workers=1, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+    dataloader = DataLoader(dataset, num_workers=0, batch_size=args.batch_size, shuffle=True, pin_memory=True, drop_last=True)
     return dataloader
     
 

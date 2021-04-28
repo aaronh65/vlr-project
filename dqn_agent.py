@@ -4,6 +4,7 @@ from models import DQNModel, DQNBase
 from dqn_dataloader import get_dataloader
 from utils import spatial_norm
 from autoencoder import AutoEncoder
+import copy
 
 import gym
 # import wandb
@@ -14,6 +15,7 @@ import numpy as np
 import argparse
 from tqdm import tqdm
 from torchvision import transforms
+from PIL import Image, ImageDraw
 
     
 def burn_in(hparams, env, train_loader):
@@ -30,18 +32,54 @@ def burn_in(hparams, env, train_loader):
 
         state = new_state
 
+def visualize(state, action, reward, next_state, done, meta):
+    #N = min(state.shape[0], 8)
+    N = 8
+    images = list()
+    Q, nQ, meaning, next_action = meta['Q'], meta['nQ'], meta['meaning'], meta['next_action']
+    for n in range(N):
+        _state = state[n].cpu().numpy().transpose(1,2,0)
+        _state = np.uint8(_state*255)
+        _next_state = next_state[n].cpu().numpy().transpose(1,2,0)
+        _next_state = np.uint8(_next_state*255)
+        text = np.uint8(np.zeros(_next_state.shape))
+        text = Image.fromarray(text)
+        draw = ImageDraw.Draw(text)
+
+        _action = int(action[n].item())
+        draw.text((5,10), f'action \t= {meaning[_action]}', (255,255,255))
+        draw.text((5,20), f'Q(s,a) \t= {Q[n].item():.5f}', (255,255,255))
+        draw.text((5,30), f'reward \t= {reward[n].item()}', (255,255,255))
+        draw.text((5,40), f'nQ(s,a) \t= {nQ[n].item():.5f}', (255,255,255))
+        _next_action = int(next_action[n].item())
+        draw.text((5,50), f'naction \t= {meaning[_next_action]}', (255,255,255))
+        draw.text((5,60), f'done \t= {bool(done[n].item())}', (255,255,255))
+        combined = np.hstack((_state, _next_state, text))
+        images.append(cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
+
+    left = np.vstack(images[:4])
+    right = np.vstack(images[4:])
+    images = np.hstack((left,right))
+    cv2.imshow('debug', images)
+    cv2.waitKey(10)
+
+
+
 def eps_greedy(eps, env, q_values):
     if np.random.rand() < eps:
         return env.action_space.sample()
     else:
-        return np.argmax(q_values.cpu().squeeze().numpy())
+        vals = q_values.cpu().squeeze().numpy()
+        return np.argmax(vals)
             
 def main(hparams):
 
     # setup RL environment and burn in data
+
     env = gym.make('Pong-v0')
+    #env = gym.make('Skiing-v0')
     #env = gym.make('CartPole-v0')
-    print(env.action_space)
+    meaning = env.get_action_meanings()
     state = env.reset()
     done = False
     
@@ -49,19 +87,23 @@ def main(hparams):
     burn_in(hparams, env, train_loader)
 
     if hparams.model == 'base':
-        model = DQNBase(6)
+        model = DQNBase(env.action_space.n)
     # else:
     #     model = AutoEncoder.load_from_checkpoint(args.ae_path)
+    model_t = copy.deepcopy(model)
+    model_t.eval()
 
     if args.cuda:
         model.cuda()
+        model_t.cuda()
 
 
     criterion = torch.nn.MSELoss(reduction='none')
     optim = torch.optim.Adam(list(model.parameters())) 
     gamma = 0.99
-    print_freq = 10
+    print_freq = 50
     val_freq = 500
+    step = 0
     # ignore for now
     # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
     transform = transforms.Compose([
@@ -101,23 +143,18 @@ def main(hparams):
                 for i, item in enumerate(batch[:-1]): # excluding info
                     batch[i] = item.cuda()
             _state, _action, _reward, _next_state, _done, _info = batch
-
-            #debug
-            if False:
-                rgb = _state[0].cpu().numpy().transpose(1,2,0)
-                rgb = np.uint8(rgb*255)
-                cv2.imshow('rgb', rgb)
-                cv2.waitKey(10)
-
+            
+                
             # retrieve Q(s,a)
             Qs = model(_state) # N,3
-            Qsa = Qs[torch.arange(_state.shape[0]).long(), _action.long()]
+            Qsa = torch.gather(Qs, -1, _action.long())
+            #Qsa = Qs[torch.arange(_state.shape[0]).long(), _action.long()]
 
             # retrieve nQ(s,a)
             with torch.no_grad():
-                nQs = model(_next_state) # N,3
-                nQsa, _ = torch.max(nQs, dim=-1)
-            
+                nQs = model_t(_next_state) # N,3
+                nQsa, _next_action = torch.max(nQs, dim=-1, keepdim=True)
+                
             target = _reward * (1 - _done) * gamma * nQsa
 
             batch_loss = criterion(Qsa, target)
@@ -125,8 +162,12 @@ def main(hparams):
             loss.backward()
             optim.step()
 
+            meta = {'Q': Qsa, 'nQ': nQsa, 'meaning': meaning, 'next_action': _next_action}
+
+
             if batch_nb % print_freq == 0:
                 tqdm.write("Loss: {}".format(loss.item()))
+                visualize(_state, _action, _reward, _next_state, _done, meta)
 
             if batch_nb % val_freq == 0 and batch_nb != 0:
                 model.eval()
@@ -154,6 +195,10 @@ def main(hparams):
 
                 done = True # reset at beginning of next train iter
                 model.train()
+                step += 1
+
+                if step % args.target_update_freq == 0:
+                    model_t.load_state_dict(model.state_dict())
         
     
 
@@ -166,10 +211,11 @@ if __name__ == '__main__':
 
     # DRL args
     parser.add_argument('--epoch_len', type=int, default=1000)
-    parser.add_argument('--buffer_len', type=int, default=100000)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--buffer_len', type=int, default=20000)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--max_epochs', type=int, default=50)
-    parser.add_argument('--burn_steps', type=int, default=10000)
+    parser.add_argument('--burn_steps', type=int, default=1000)
+    parser.add_argument('--target_update_freq', type=int, default=100)
     parser.add_argument('--num_eval_episodes', type=int, default=5)
     parser.add_argument('--rollout_steps_per_iteration', type=int, default=20)
     parser.add_argument('--model', type=str, default='base')
