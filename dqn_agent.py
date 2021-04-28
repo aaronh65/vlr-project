@@ -46,6 +46,7 @@ def main(hparams):
     if args.cuda:
         model.cuda()
     
+    encoder = AutoEncoder.load_from_checkpoint(args.ae_path)
     criterion = torch.nn.MSELoss(reduction='none')
     optim = torch.optim.Adam(list(model.parameters())) 
     gamma = 0.99
@@ -133,6 +134,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_eval_episodes', type=int, default=10)
     parser.add_argument('--rollout_steps_per_iteration', type=int, default=20)
     parser.add_argument('--model', type=str, default='base')
+    parser.add_argument('--ae_path', type=str, default='checkpoints/autoencoder/20210423_184757/epoch=9.ckpt')
     args = parser.parse_args()
 
     main(args)
