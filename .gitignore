@@ -1,3 +1,5 @@
+*.yml
+wandb
 lightning_logs
 checkpoints
 data

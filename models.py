@@ -52,27 +52,18 @@ class ResnetDecoder(nn.Module):
 # DQN MODELS
 
 class DQNBase(nn.Module):
-    def __init__(self, num_actions):
+    def __init__(self, num_actions, history_size=1):
         super().__init__()
-        resnet18 = torchvision.models.resnet18(pretrained=False)
-        self.backbone = nn.Sequential(*list(resnet18.children())[:-2]) 
-        self.reduce_channels = nn.Sequential(
-            nn.Conv2d(512, 128, 1),
-            nn.Conv2d(128, 32, 1),
-        )
-
-        self.regressor = nn.Sequential(
-            nn.Linear(1280, 512),
-            nn.Linear(512, 128),
-            nn.Linear(128, 32),
-            nn.Linear(32, num_actions),
-        )
+        self.network = torchvision.models.resnet18(pretrained=False, num_classes=num_actions)
+        #self.network = nn.Sequential(*list(resnet18.children())[:]) 
+        old = self.network.conv1
+        self.network.conv1 = torch.nn.Conv2d(
+            history_size, old.out_channels,
+            kernel_size=old.kernel_size, stride=old.stride,
+            padding=old.padding, bias=old.padding)
 
     def forward(self, x):
-        x = self.backbone(x) # N,512,8,5
-        x = self.reduce_channels(x) # N,32,8,5
-        x = x.flatten(1,-1) # N,32*8*5 = N,1280
-        x = self.regressor(x) # N,num_actions
+        x = self.network(x) # N,512,8,5
         return x
 
 class DQNModel(nn.Module):
