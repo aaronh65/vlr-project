@@ -289,11 +289,11 @@ if __name__ == '__main__':
     parser.add_argument('--log', action='store_true')
     parser.add_argument('--ae_path', type=str, 
             default='checkpoints/autoencoder/20210423_184757/epoch=9.ckpt')
-    parser.add_argument('--save_dir', type=Path, default='checkpoints/dqn')
+    parser.add_argument('--save_dir', type=Path, default='checkpoints')
 
     # DRL args
     parser.add_argument('--epoch_len', type=int, default=1000)
-    parser.add_argument('--buffer_len', type=int, default=20000)
+    parser.add_argument('--buffer_len', type=int, default=100000)
     parser.add_argument('--history_size', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--max_epochs', type=int, default=100)
@@ -308,7 +308,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    args.save_dir = args.save_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+    args.save_dir = args.save_dir / 'dqn' / datetime.now().strftime("%Y%m%d_%H%M%S")
     args.save_dir.mkdir(parents=True, exist_ok=False)
 
     main(args)

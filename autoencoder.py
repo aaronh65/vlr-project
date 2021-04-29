@@ -168,11 +168,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--max_epochs', type=int, default=2)
-    parser.add_argument('--save_dir', type=str, default='checkpoints/autoencoder')
+    parser.add_argument('--save_dir', type=str, default='checkpoints')
     parser.add_argument('--log', action='store_true')
     args = parser.parse_args()
 
-    save_dir = Path(args.save_dir) / datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_dir = Path(args.save_dir) / 'autoencoder' / datetime.now().strftime("%Y%m%d_%H%M%S")
     save_dir.mkdir(exist_ok=True, parents=True)
     args.save_dir = str(save_dir)
     main(args)
